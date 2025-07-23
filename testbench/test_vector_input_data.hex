@@ -1,0 +1,30 @@
+import numpy as np
+
+def read_hex_file_signed16(path):
+    try:
+        with open(path, 'r') as f:
+            lines = f.readlines()
+            data = []
+            for line in lines:
+                hex_val = line.strip()
+                if hex_val:
+                    val = int(hex_val, 16)
+                    if val & 0x8000:
+                        val -= 0x10000  # Convert to signed
+                    data.append(val)
+            return np.array(data, dtype=np.int16)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"[ERROR] File not found: {path}")
+
+# Example usage:
+input_data = read_hex_file_signed16("../test_vectors/input_data.hex")
+print("[INFO] Loaded input samples:", input_data[:10])  # print first 10 for check
+
+000A
+000B
+000C
+000D
+000E
+000F
+0010
+...

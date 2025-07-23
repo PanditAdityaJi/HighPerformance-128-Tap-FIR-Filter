@@ -1,51 +1,62 @@
-# ===============================
-# FIR Filter DC Synthesis Script
-# ===============================
+# synthesis_script.tcl - FIR Filter Synthesis Flow for Synopsys Design Compiler
 
-# === Setup ===
-set DESIGN "firmac"
-set TOP_MODULE $DESIGN
-set RTL_PATH "../src"
-set SDC_FILE "constraints.sdc"
-set REPORT_DIR "reports"
-set NETLIST_DIR "netlist"
+# Output directories
+set OUTDIR ./outputs
+set NETLIST ${OUTDIR}/netlists/fir128_da_syn.v
+set SDF     ${OUTDIR}/sdf/fir128_da_syn.sdf
+set DDC     ${OUTDIR}/fir_filter_128_tap.ddc
+set REPORTS ${OUTDIR}/reports
 
-# === Libraries ===
-set target_library "typical.db"
-set link_library "* typical.db"
+file mkdir -p $OUTDIR/netlists
+file mkdir -p $OUTDIR/sdf
+file mkdir -p $REPORTS
 
-# === Design Compiler Initialization ===
-set_app_var hdlin_auto_save_templates true
-set_app_var sh_enable_page_mode true
-set_app_var hdlin_infer_multibit true
+# Define top module
+set TOP_MODULE fir_filter_top
 
-# === Read Design ===
-read_verilog $RTL_PATH/firmac.v
-read_verilog $RTL_PATH/coeff_update.v
+# Read RTL
+read_file -format verilog {
+    ../rtl/fir_filter_top.v
+    ../rtl/distributed_arithmetic.v
+    ../rtl/ping_pong_buffer.v
+    ../rtl/overflow_protection.v
+    ../rtl/clock_domain_crossing.v
+    ../rtl/coefficient_memory.v
+}
+
+# Elaborate
 current_design $TOP_MODULE
+elaborate $TOP_MODULE
 link
 
-# === Check Design ===
-check_design
-check_timing
+# Read constraints
+source ../synthesis/constraints.sdc
 
-# === Compile ===
-compile_ultra
+# Set operating conditions
+set_operating_conditions -library typical -analysis_type single -corner slow
 
-# === Reports ===
-file mkdir $REPORT_DIR
-report_area        > $REPORT_DIR/area.rpt
-report_power       > $REPORT_DIR/power.rpt
-report_timing      > $REPORT_DIR/timing.rpt
-report_utilization > $REPORT_DIR/utilization.rpt
+# Design compiler optimizations
+set_max_area 0
+set_max_delay 1.0
 
-# === Write Netlist ===
-file mkdir $NETLIST_DIR
-write -format verilog -hierarchy -output $NETLIST_DIR/${DESIGN}_synth.v
-write_sdf -version 3.0 $NETLIST_DIR/${DESIGN}.sdf
-write_sdc $NETLIST_DIR/${DESIGN}.sdc
+# Clock gating & retiming (optional)
+set_clock_gating_style -positive_edge_logic {integrated}
+set_power_collapse true
 
-# === Save Design State ===
-write -format ddc -hierarchy -output $NETLIST_DIR/${DESIGN}.ddc
+# Compile
+compile_ultra -gate_clock
 
-echo "[INFO] Synthesis Complete for $TOP_MODULE"
+# Write outputs
+write -format verilog -hierarchy -output $NETLIST
+write_sdf $SDF
+write_file -format ddc -hierarchy -output $DDC
+write_sdc $OUTDIR/netlists/fir128_da_constraints.sdc
+
+# Reports
+report_timing > ${REPORTS}/timing_report.txt
+report_area   > ${REPORTS}/area_report.txt
+report_power  > ${REPORTS}/power_report.txt
+report_qor    > ${REPORTS}/qor_report.txt
+
+# Exit DC
+exit
